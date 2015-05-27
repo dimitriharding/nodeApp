@@ -15,7 +15,7 @@ var config = {
             };
            
 var mongo = require('mongoskin');
-var db = mongo.db("mongodb://"+config.USER + ":"+     config.PASS + "@"+     config.HOST + ":"+    config.PORT + "/"+     config.DATABASE;, {native_parser:true});
+var db = mongo.db("mongodb://"+config.USER + ":"+     config.PASS + "@"+     config.HOST + ":"+    config.PORT + "/"+     config.DATABASE, {native_parser:true});
 
 
 var routes = require('./routes/index');
