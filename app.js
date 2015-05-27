@@ -6,8 +6,16 @@ var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
 // Database------------------------------------------------->
+var config = {       
+              "USER"    : "",                  
+              "PASS"    : "",       
+              "HOST"    : "ec2-52-24-31-217.us-west-2.compute.amazonaws.com",         
+              "PORT"    : "27017",        
+              "DATABASE" : "firstApp"     
+            };
+           
 var mongo = require('mongoskin');
-var db = mongo.db("mongodb://localhost:27017/firstAppDB", {native_parser:true});
+var db = mongo.db("mongodb://"+config.USER + ":"+     config.PASS + "@"+     config.HOST + ":"+    config.PORT + "/"+     config.DATABASE;, {native_parser:true});
 
 
 var routes = require('./routes/index');
