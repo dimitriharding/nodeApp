@@ -1,79 +1,130 @@
-var express = require('express');
-var path = require('path');
-var favicon = require('serve-favicon');
-var logger = require('morgan');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
+var http      = require('http');
+var mongoose  = require('mongoose');
+var express   = require('express');
 
-// Database------------------------------------------------->
-var config = {       
-              "USER"    : "",                  
-              "PASS"    : "",       
-              "HOST"    : "ec2-52-24-31-217.us-west-2.compute.amazonaws.com",         
-              "PORT"    : "27017",        
-              "DATABASE" : "firstApp"     
-            };
-           
-var mongo = require('mongoskin');
-var db = mongo.db("mongodb://"+config.USER + ":"+     config.PASS + "@"+     config.HOST + ":"+    config.PORT + "/"+     config.DATABASE, {native_parser:true});
+var app       = express();
 
+var config = {
+      "USER"     : "",                  // if your database has user/pwd defined
+      "PASS"     : "",
+      "HOST"     : "ec2-54-252-31-96.ap-southeast-2.compute.amazonaws.com",  // the domain name of our MongoDB EC2 instance
+      "PORT"     : "27017",             // this is the default port mongoDB is listening for incoming queries
+      "DATABASE" : "my_example"         // the name of your database on that instance
+    };
 
-var routes = require('./routes/index');
-var users = require('./routes/users');
+var dbPath  = "mongodb://" + config.USER + ":" +
+    config.PASS + "@"+
+    config.HOST + ":"+
+    config.PORT + "/"+
+    config.DATABASE;
 
-var app = express();
+var standardGreeting = 'Hello World!';
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
+var db;              // our MongoDb database
 
-// uncomment after placing your favicon in /public
-//app.use(favicon(__dirname + '/public/favicon.ico'));
-app.use(logger('dev'));
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+var greetingSchema;  // our mongoose Schema
+var Greeting;        // our mongoose Model
 
-// Make our db accessible to our router--------------------->
-app.use(function(req,res,next){
-    req.db = db;
-    next();
+// create our schema
+greetingSchema = mongoose.Schema({
+  sentence: String
 });
+// create our model using this schema
+Greeting = mongoose.model('Greeting', greetingSchema);
 
-app.use('/', routes);
-app.use('/users', users);
+// ------------------------------------------------------------------------
+// Connect to our Mongo Database hosted on another server
+//
+console.log('\nattempting to connect to remote MongoDB instance on another EC2 server '+config.HOST);
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  var err = new Error('Not Found');
-  err.status = 404;
-  next(err);
-});
+if ( !(db = mongoose.connect(dbPath)) )
+  console.log('Unable to connect to MongoDB at '+dbPath);
+else 
+  console.log('connecting to MongoDB at '+dbPath);
 
-// error handlers
+// connection failed event handler
+mongoose.connection.on('error', function(err){
+  console.log('database connect error '+err);
+}); // mongoose.connection.on()
 
-// development error handler
-// will print stacktrace
-if (app.get('env') === 'development') {
-  app.use(function(err, req, res, next) {
-    res.status(err.status || 500);
-    res.render('error', {
-      message: err.message,
-      error: err
-    });
+// connection successful event handler:
+// check if the Db already contains a greeting. if not, create one and save it to the Db
+mongoose.connection.once('open', function() {
+  var greeting;
+  
+  console.log('database '+config.DATABASE+' is now open on '+config.HOST );
+  
+  // search if a greeting has already been saved in our db
+  Greeting.find( function(err, greetings){
+    if( !err && greetings ){ // at least one greeting record already exists in our db. we can use that
+      console.log(greetings.length+' greetings already exist in DB' );
+    }
+    else { // no records found
+      console.log('no greetings in DB yet, creating one' );
+
+      greeting = new Greeting({ sentence: standardGreeting });
+      greeting.save(function (err, greetingsav) {
+        if (err){ // TODO handle the error
+          console('couldnt save a greeting to the Db');
+        }
+        else{
+          console.log('new greeting '+greeting.sentence+' was succesfully saved to Db' );
+
+          Greeting.find( function(err, greetings){
+            if( greetings )
+              console.log('checked after save: found '+greetings.length+' greetings in DB' );
+          }); // Greeting.find()
+        } // else
+      }); // greeting.save()
+    } // if no records
+  }); // Greeting.find()
+
+  
+}); // mongoose.connection.once()
+
+// ------------------------------------------------------------------------
+// set up Express routes to handle incoming requests
+//
+// Express route for all incoming requests
+app.get('/', function(req, res){
+  var responseText = '';
+
+  console.log('received client request');
+  if( !Greeting )
+    console.log('Database not ready');
+  
+  // look up all greetings in our DB
+  Greeting.find(function (err, greetings) {
+    if (err) {
+      console.log('couldnt find a greeting in DB. error '+err);
+      next(err);
+    }
+    else {
+      if(greetings){
+        console.log('found '+greetings.length+' greetings in DB');
+        // send newest greeting 
+        responseText = greetings[0].sentence;
+      }
+      console.log('sending greeting to client: '+responseText);
+      res.send(responseText);
+    }
   });
-}
+}); // apt.get()
 
-// production error handler
-// no stacktraces leaked to user
-app.use(function(err, req, res, next) {
-  res.status(err.status || 500);
-  res.render('error', {
-    message: err.message,
-    error: {}
-  });
-});
+//
+// Express route to handle errors
+//
+app.use(function(err, req, res, next){
+  if (req.xhr) {
+    res.send(500, 'Something went wrong!');
+  } else {
+    next(err);
+  }
+}); // apt.use()
 
-
-module.exports = app;
+// ------------------------------------------------------------------------
+// Start Express Webserver
+//
+console.log('starting the Express (NodeJS) Web server');
+app.listen(8080);
+console.log('Webserver is listening on port 8080');
